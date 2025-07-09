@@ -42,7 +42,7 @@ namespace PotentialField{
 			return n.squaredNorm() > 1e-18 ? n.normalized() : Eigen::Vector2d::Zero();
 		}
 
-		inline void setPosition(Eigen::Vector2d& newPosition){
+		inline void setPosition(const Eigen::Vector2d& newPosition){
 			center = newPosition;
 		}
 

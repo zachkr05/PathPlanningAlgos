@@ -1,13 +1,6 @@
 
 
 # ---------------- request ---------------------------------
-geometry_msgs/Point  p1          # first position  (x,y,z)
-geometry_msgs/Point  p2          # second position (x,y,z)
-geometry_msgs/Point  p3          # third position  (x,y,z)
-float64              kappa       # the extra scalar you mentioned
----
+
 # ---------------- response --------------------------------
-float64[]            v1          # RowVectorXd #1  (any length)
-float64[]            v2          # RowVectorXd #2
-float64[]            v3          # RowVectorXd #3
 

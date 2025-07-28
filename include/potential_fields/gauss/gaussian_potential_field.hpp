@@ -1,8 +1,20 @@
 #pragma once
 
-//TODO:
-//import the structs
+// Standard library
 #include <vector>
+#include <deque>
+#include <algorithm>
+#include <cmath>        // for std::hypot, std::clamp (C++17)
+
+// ROS
+#include <ros/ros.h>
+
+// Eigen
+#include <Eigen/Dense>
+
+// Your custom structs (adjust paths as needed)
+#include "types/obstacle.hpp"    // or wherever your Obstacle struct is
+#include "types/goal.hpp"        // or wherever your Goal struct is
 
 namespace PotentialField{
 
@@ -10,11 +22,11 @@ class GaussianPotentialField
 {
 
 private:
-    std::vector<Obstacle> _obstacles;
-    Goal                  _goal;
+    std::vector<World::Obstacle> _obstacles;
+    World::Goal                  _goal;
 
 public:
-	explicit GaussianPotentialField (std::vector<Obstacle> obs, Goal g = {}):
+	explicit GaussianPotentialField (std::vector<World::Obstacle> obs, World::Goal g = {}):
 		_obstacles(std::move(obs)), _goal(std::move(g)) {}
 
 
@@ -26,12 +38,12 @@ public:
 	 *
 	*/
 
-	inline void setGoal(const Goal& g) noexcept {_goal = g;}	
-	inline void setObstacles(const std::vector<Obstacle>& obs) noexcept {_obstacles = obs;}
+	inline void setGoal(const World::Goal& g) noexcept {_goal = g;}	
+	inline void setObstacles(const std::vector<World::Obstacle>& obs) noexcept {_obstacles = obs;}
 	
 	inline Eigen::Vector2d getGoal() noexcept {return _goal.getPosition();}
 
-	inline void addObstacle(const Obstacle& o) {_obstacles.push_back(o);}
+	inline void addObstacle(const World::Obstacle& o) {_obstacles.push_back(o);}
 	inline void clearObstacles() noexcept {_obstacles.clear();}
 
 	inline double getTotalPotential(Eigen::Vector2d& p) const noexcept{
@@ -46,7 +58,8 @@ public:
 		return g;
 	}
     
-  inline void generateTrajectory(const Eigen::Vector2d& start, double resolution, PathPlanning::GaussianPotentialField GPR, 	Eigen::RowVectorXd& xs, Eigen::RowVectorXd& ys, Eigen::RowVectorXd& ss){
+  inline void generateTrajectory(const Eigen::Vector2d& start, double resolution, 
+                                 Eigen::RowVectorXd& xs, Eigen::RowVectorXd& ys, Eigen::RowVectorXd& ss){
 
     Eigen::Vector2d current_pt = start;
 
@@ -60,14 +73,14 @@ public:
     xs(0) = start(0);
     ys(0) = start(1);
     ss(0) = 0.00;
-    ROS_WARN("Goal position %.2f, %.2f", GPR.getGoal()(0), GPR.getGoal()(1));
+    ROS_WARN("Goal position %.2f, %.2f", this->getGoal()(0), this->getGoal()(1));
     ROS_WARN("Start position %.2f, %.2f", start(0), start(1));
     std::deque<Eigen::Vector2d> temp;
     
     for (int i=1; i < N; ++i){
       ROS_WARN("IN LOOP");
       ctr++;
-      double dist_to_goal = (GPR.getGoal() - current_pt).squaredNorm();
+      double dist_to_goal = (this->getGoal() - current_pt).squaredNorm();
       if (i%2==0){ 
         temp.push_back(current_pt);
       } else{
@@ -81,7 +94,7 @@ public:
       Eigen::Vector2d front = temp.front();
       Eigen::Vector2d back = temp.back();
 
-      Eigen::Vector2d grad = GPR.getTotalGradient(current_pt);
+      Eigen::Vector2d grad = this->getTotalGradient(current_pt);
 
       double grad_norm = grad.norm();
 
@@ -92,7 +105,7 @@ public:
       
   //		grad /= grad_norm;
       double step = std::clamp(grad_norm, 0.0, resolution);   // e.g. 0.02 – 0.10 m
-      current_pt += step * grad / grad_norm;                // same as “dt · v”
+      current_pt += step * grad / grad_norm;                // same as "dt · v"
   //		current_pt += resolution * grad;
 
       if (front.isApprox(current_pt, 1e-2) || back.isApprox(current_pt, 1e-2)) {
@@ -128,4 +141,4 @@ public:
   }
 
 	};
-}
+}  // namespace PotentialField

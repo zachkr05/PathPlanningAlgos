@@ -1,103 +1,115 @@
 #pragma once
-// -----------------------------------------------------------------------------
-// Dynamic obstacle manager WITHOUT explicit threads.
-// A ros::Timer (default 1 Hz) scans the ROS master for topics matching
-//     /vicon/obstacle_<N>/obstacle_<N>
-// and keeps an up-to-date map of Obstacle objects.
-// -----------------------------------------------------------------------------
+/**
+ * @file obstacle_manager.hpp
+ * @brief Class for tracking and querying dynamic obstacles in the environment.
+ *
+ * Typical usage:
+ * @code
+ *   ros::NodeHandle nh("~");
+ *   Environment::ObstacleManager mgr(nh, 5.0); // 5 Hz scan
+ *   ros::spin();
+ *
+ *   if (mgr.hasObstacle("chair_01")) {
+ *       if (const Obstacle* obs = mgr.getObstacle("chair_01")) {
+ *           // use *obs
+ *       }
+ *   }
+ * @endcode
+ */
 
-#include <ros/ros.h>
-#include <ros/master.h>
-#include <geometry_msgs/TransformStamped.h>
-#include <regex>
 #include <map>
 #include <string>
-#include <Eigen/Dense>
-#include "potential_fields/gauss/goal_obstacle.hpp"
+#include <cstddef>
+#include <mutex>
 
-namespace WorldState {
+#include <ros/ros.h>
+#include <geometry_msgs/TransformStamped.h>
 
-    using PathPlanning::Obstacle;
+#include "potential_fields/gauss/goal_obstacle.hpp"  // defines Obstacle
 
-    // ------------------------- public state --------------------------------------
-    inline std::map<std::string, Obstacle> obstacles;          // id → obstacle
-    // -----------------------------------------------------------------------------
+namespace Environment {
 
+/**
+ * @brief Manages subscriptions, periodic scans, and an in-memory registry of obstacles.
+ *
+ * This class encapsulates ROS resources (subscribers/timers) and a thread-safe
+ * container of currently tracked obstacles. It is suitable for use as a node or
+ * nodelet component.
+ */
+class ObstacleManager {
+public:
+  /// Map type used for obstacle storage.
+  using Map = std::map<std::string, Obstacle>;
 
-    // Helper: convert TransformStamped → Eigen::Vector2d (ignore z)
-    inline Eigen::Vector2d to2D(const geometry_msgs::TransformStamped& m)
-    {
-        return { m.transform.translation.x,
-                m.transform.translation.y };
-    }
+  /**
+   * @brief Construct the manager and start periodic scanning.
+   *
+   * The constructor may create a timer and set up subscriptions; pass a private
+   * or global node handle depending on your namespacing needs.
+   *
+   * @param nh Node handle used for parameters, subscribers, and timers.
+   * @param hz Desired scan/update frequency in Hertz (default: 1.0 Hz).
+   */
+  explicit ObstacleManager(ros::NodeHandle nh, double hz = 1.0);
 
-    // Subscriber callback (updates obstacle center)
-    inline void obstacleCb(const std::string& id,
-                        const geometry_msgs::TransformStamped::ConstPtr& msg)
-    {
-        obstacles[id].setPosition(to2D(*msg));
-    }
+  /// Default destructor.
+  ~ObstacleManager() = default;
 
-    // Timer callback: scan master for new obstacle topics
-    inline void scanTimerCb(const ros::TimerEvent&, ros::NodeHandle* nh)
-    {
-        std::vector<ros::master::TopicInfo> list;
-        if (!ros::master::getTopics(list)) return;
+  /**
+   * @brief Get a read-only view of all tracked obstacles.
+   *
+   * @warning The returned reference is only safe to inspect briefly. Do not
+   * store it beyond immediate use; the underlying container can change in callbacks.
+   *
+   * @return Const reference to the internal obstacle map keyed by obstacle ID.
+   */
+  const Map& getObstacles() const;
 
-        static const std::regex pat("^/vicon/obstacle_\\d+/obstacle_\\d+$");
+  /**
+   * @brief Retrieve a specific obstacle by ID.
+   * @param id Obstacle identifier.
+   * @return Pointer to the obstacle if found; otherwise @c nullptr.
+   */
+  const Obstacle* getObstacle(const std::string& id) const;
 
-        for (const auto& t : list)
-        {
-            if (!std::regex_match(t.name, pat)) continue;
+  /**
+   * @brief Check whether an obstacle with the given ID is currently tracked.
+   * @param id Obstacle identifier.
+   * @return @c true if the obstacle exists; otherwise @c false.
+   */
+  bool hasObstacle(const std::string& id) const;
 
-            std::string id = t.name.substr(t.name.rfind('/') + 1);
-            if (obstacles.count(id)) continue;           // already tracking
+  /**
+   * @brief Get the number of currently tracked obstacles.
+   * @return Count of obstacles.
+   */
+  std::size_t getObstacleCount() const;
 
-            Obstacle obs;  obs.id = id;
-            obstacles[id] = obs;
+private:
+  /**
+   * @brief Timer callback that periodically updates tracking state.
+   * @param event ROS timer event.
+   */
+  void scanTimerCb(const ros::TimerEvent& event);
 
-            // create subscriber (lifetime tied to static map to stay alive)
-            static std::map<std::string, ros::Subscriber> subs;
-            subs[id] = nh->subscribe<geometry_msgs::TransformStamped>(
-                t.name, 10,
-                boost::bind(&obstacleCb, id, _1));
+  /**
+   * @brief Subscriber callback to upsert an obstacle.
+   *
+   * You can bind the @p id using a lambda or `boost::bind` when creating the subscriber,
+   * or derive the ID from @p msg (e.g., `child_frame_id`) inside the implementation.
+   *
+   * @param msg Latest transform for the obstacle.
+   * @param id  Stable obstacle identifier (e.g., "chair_01").
+   */
+  void obstacleCb(const geometry_msgs::TransformStamped::ConstPtr& msg,
+                  const std::string& id);
 
-            ROS_INFO_STREAM("ViconTracker: now tracking " << t.name);
-        }
-    }
+private:
+  ros::NodeHandle _nh_;                          ///< Stored node handle.
+  ros::Timer      _scan_timer;                  ///< Periodic scan/update timer.
 
-    // Initialise manager: call once from your node after ros::init()
-    inline void initializeObstacleTracking(ros::NodeHandle& nh, double hz = 1.0)
-    {
-        static ros::Timer timer = nh.createTimer(
-            ros::Duration(1.0 / hz),
-            boost::bind(&scanTimerCb, _1, &nh));
-    }
+  Map _obstacles;                               ///< Tracked obstacles by ID.
+  std::map<std::string, ros::Subscriber> _subs; ///< Subscribers keyed by ID/topic.
+};
 
-    // Get all obstacles (read-only access)
-    inline const std::map<std::string, Obstacle>& getObstacles()
-    {
-        return obstacles;
-    }
-
-    // Get specific obstacle by ID (returns nullptr if not found)
-    inline const Obstacle* getObstacle(const std::string& id)
-    {
-        auto it = obstacles.find(id);
-        return (it != obstacles.end()) ? &it->second : nullptr;
-    }
-
-    // Check if obstacle exists
-    inline bool hasObstacle(const std::string& id)
-    {
-        return obstacles.count(id) > 0;
-    }
-
-    // Get number of tracked obstacles
-    inline size_t getObstacleCount()
-    {
-        return obstacles.size();
-    }
-
-} // namespace ViconTracker
-
+} // namespace Environment

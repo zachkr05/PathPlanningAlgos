@@ -29,7 +29,7 @@ namespace Environment {
 			 * @return The normalized outward vector from the obstacle center to the point.
 			 */
 
-			inline Eigen::Vector2d normal(const Eigen::Vector2d& p) const
+			inline Eigen::Vector2d normal(const Eigen::Vector2d& p) const;
 
 			// ===== Setters =====
 

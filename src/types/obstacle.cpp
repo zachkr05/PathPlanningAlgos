@@ -21,7 +21,7 @@ namespace Environment{
    * @return The gradient vector at the specified point.
    */
 
-  Eigen::Vector2d Obstacle::getGradient(Eigen::Vector2d point, const Eigen::Vector2d& goal_pos) const noexcept{
+  const Eigen::Vector2d& Obstacle::getGradient(Eigen::Vector2d point, const Eigen::Vector2d& goal_pos) const noexcept{
 
     double d = std::max(1e-6, dist(point));
     Eigen::Vector2d normal_vec = normal(point);

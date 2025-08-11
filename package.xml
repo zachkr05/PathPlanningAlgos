@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>PathPlanningAlgos</name>
+  <version>0.0.1</version>
+  <description>Robot and obstacle tracking for Vicon-based path-planning demos.</description>
+
+  <!-- One (or more) maintainers -->
+  <maintainer email="your_email@example.com">Your Name</maintainer>
+
+  <!-- Choose any OSI-approved license -->
+  <license>MIT</license>
+
+  <!-- Build system -->
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <!-- Build-time and run-time dependencies -->
+  <depend>roscpp</depend>
+  <depend>geometry_msgs</depend>
+  <depend>std_msgs</depend>
+  <!-- (Eigen3 is found via CMake; it’s not a catkin package, so no entry here) -->
+  <build_depend>eigen</build_depend>
+  <build_export_depend>eigen</build_export_depend>
+  <export>
+    <!-- Empty for now; add plugins, nodelet exports, etc. here if needed -->
+  </export>
+</package>
+

@@ -1,0 +1,16 @@
+
+
+<launch>
+  
+  <!-- Robot pose tracker -->
+  <node pkg="path_planning" type="robot_tracker_node" name="robot_tracker">
+    <param name="topic" value="/vicon/robot/robot" />
+  </node>
+
+  <!-- Dynamic obstacle manager -->
+  <node pkg="path_planning" type="obstacle_tracker_node" name="obstacle_tracker">
+    <param name="scan_hz" value="1.0" />
+  </node>
+
+</launch>
+

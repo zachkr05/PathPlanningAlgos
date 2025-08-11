@@ -164,14 +164,49 @@ Point GPF::calculateRepulsiveGradient(Eigen::Vector2d& point, const Preferences&
 
 
 int main() {
+    // Instantiate the potential field
+    GPF potential_field;
 
-  GPF potential_field; 
+    // Start position
+    Eigen::Vector2d start_pos(0.0, 0.0);
 
-  Eigen::Vector2d start_pos(2,2);
+    // Create a goal at (5,5)
+    World::Goal goal;
+    Eigen::Vector2d goal_pos(5.0, 5.0);
+    goal.setPosition(goal_pos);
+    goal.setAttractiveGain(1.0); // how strongly to pull toward the goal
 
-  World::Goal goal;
+    // Create obstacle parameters
+    UserPreferences::PotentialFieldParams params1;
+    params1.amplitude = 10.0;
+    params1.sigma = 1.0;
+    params1.id = "set1";
 
-  goal.center = Eigen::Vector2d(5.0)
+    // Create obstacles
+    Environment::Obstacle obstacle1;
+    obstacle1.id = "obs1";
+    obstacle1.center = Eigen::Vector2d(2.0, 0.0);
+    obstacle1.radius = 0.5;
 
-  
+    Environment::Obstacle obstacle2;
+    obstacle2.id = "obs2";
+    obstacle2.center = Eigen::Vector2d(0.0, 2.0);
+    obstacle2.radius = 0.5;
+
+    // Map of params -> list of obstacles
+    GPF::Map obstacles;
+    obstacles[params1] = { obstacle1, obstacle2 };
+
+    // Generate trajectory
+    auto trajectory = potential_field.generateTrajectory(start_pos, obstacles, goal);
+
+    // Print the trajectory
+    std::cout << "Generated trajectory (" << trajectory.size() << " points):\n";
+    for (size_t i = 0; i < trajectory.size(); ++i) {
+        std::cout << i << ": (" 
+                  << trajectory[i].x() << ", " 
+                  << trajectory[i].y() << ")\n";
+    }
+
+    return 0;
 }

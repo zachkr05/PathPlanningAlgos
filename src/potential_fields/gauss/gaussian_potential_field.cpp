@@ -145,7 +145,7 @@ Point GPF::calculateRepulsiveGradient(Eigen::Vector2d& point, const Preferences&
 
     Eigen::Vector2d tangent_vec (-normal_vec.y(), normal_vec.x());
 
-    goal_dir = (tangent_vec - point).normalized();
+    goal_dir = (tangent_vec - point).normalized(); //this line needs to be fixed
 
     rot_sign = (normal_vec.x() * goal_dir.y() - normal_vec.y() * goal_dir.x() > 0 ? 1.0 : -1.0);
 
@@ -165,20 +165,13 @@ Point GPF::calculateRepulsiveGradient(Eigen::Vector2d& point, const Preferences&
 
 int main() {
 
-  PotentialFields::GPF potential_field;
+  GPF potential_field; 
 
-  Goal goal;
+  Eigen::Vector2d start_pos(2,2);
 
-  Preference params1;
+  World::Goal goal;
 
-  Preference params2;
-
-  Obstacle obstacle1;
-
-  Obstacle obstacle2;
-
-
-
+  goal.center = Eigen::Vector2d(5.0)
 
   
 }

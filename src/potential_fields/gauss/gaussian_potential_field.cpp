@@ -1,6 +1,4 @@
 
-
-
 #include <string>
 #include <boost/thread.hpp>
 #include <Eigen/Dense>
@@ -12,95 +10,130 @@
 #include <thread>
 #include <cmath>
 #include <algorithm>
-
 #include <iterator>
-
 #include <future>
-using Point = Eigen::Vector2d;
+
 using namespace PotentialFields;
- using Obstacle = Environment::Obstacle;
-    using Map = std::map<UserPreferences::PotentialFieldParams, std::vector<Obstacle>>;
-    using Preferences = UserPreferences::PotentialFieldParams;
-   using Goal = World::Goal;
 
+/*
+ *
+ * @brief Generates a trajectory using the Gaussian Potential Field
+ *
+ * @param[in] pos_r The position of the robot
+ * @param[in] obstacles map of <learned params -> list of obstacles>
+ * @param[in] goal the target/end point for the trajectory
+ *
+ * @return returns a full trajectory as a list of points
+ */
 
+const std::vector<Eigen::Vector2d> GPF::generateTrajectory(const Point& pos_r, const Map& obstacles, const Goal& goal){
 
+  //Initialize values
+  Point current_pt = pos_r;
+  std::vector<Point> trajectory;
 
-const std::vector<Eigen::Vector2d> GPF::generateTrajectory(Eigen::Vector2d& pos_r, Map& obstacles, Goal& goal){
+  Point grad;
+  double grad_norm;
 
-
-  Eigen::Vector2d current_pt = pos_r;
-
-  std::vector<Eigen::Vector2d> trajectory;
-
+  //Calculate the trajectory point by point
   for(int i = 0; i < MAX_PTS; ++i){
 
-    //get the total gradient amongst all obstacles
-    
-    const Eigen::Vector2d grad = this->calculateTotalGradient(current_pt, obstacles, goal);
-    const double grad_norm = grad.norm();
-
-
+    //Calculate the gradient
+    grad = this->calculateTotalGradient(current_pt, obstacles, goal);
+    grad_norm = grad.norm();
     double step = std::clamp(grad_norm, 0.0, RESOLUTION);
-    current_pt += step*grad / grad_norm;
 
+    current_pt += step*grad / grad_norm;
     trajectory.push_back(current_pt);
+
   }
 
   return trajectory;
+
 }
 
-const Eigen::Vector2d GPF::calculateAttractiveGradient(Eigen::Vector2d& point, Goal& goal){
-  return goal.getAttractiveGradient(point);
+
+/*
+ *
+ * @brief Calculates the attractive gradient
+ *
+ * @param[in] point the point in the world space in which to calculate the attractive gradient
+ * @param[in] goal the target/end point for the trajectory
+ *
+ * @return returns a 2d vector of the x and y components of the attractive force
+ *
+ */ 
+
+const Point GPF::calculateAttractiveGradient(const Point& point, const Goal& goal){
+  return -goal.k_att * (point - goal.position);
 }
 
-const Eigen::Vector2d GPF::calculateTotalGradient(Eigen::Vector2d& point, Map& obstacles,  Goal& goal){
+/*
+ *
+ * @brief calculates the combined gradient [ (gradient of attractive force) + (gradient of repulsive force)]
+ *
+ * @param[in] point the point at which to evaluate the gradient
+ * @param[in] obstacles map of <learned params -> list of obstacles>
+ * @param[in] goal the target/end point for the trajectory
+ *
+ * @return returns the combined gradient with x and y components. 
+ *
+ */
 
+const Point GPF::calculateTotalGradient(const Point& point, const Map& obstacles, const Goal& goal){
 
   //Calculate the gradient from the goal
   const Eigen::Vector2d grad_attr = this->calculateAttractiveGradient(point, goal);
 
   //Calculate the repulsive gradient
-  const Eigen::Vector2d grad_repulsive = calculateSummedRepulsiveGradient(point, obstacles);
+  const Eigen::Vector2d grad_repulsive = calculateSummedRepulsiveGradient(point, obstacles,goal);
   
   return grad_attr + grad_repulsive;
 }
 
-const Eigen::Vector2d GPF::calculateSummedRepulsiveGradient(Eigen::Vector2d& point, Map& obstacles){
 
-  std::vector<Eigen::Vector2d> results;
-  results.reserve(obstacles.size());
-  size_t workers = std::thread::hardware_concurrency() / 2;
-  size_t total = obstacles.size();
-  size_t batch_size = (total+workers-1) / workers;
 
+//note there is definitely a better way to do the threading.
+//
+//
+//
+/* @brief Calculates the repulsive gradient for summed among all obstacles
+ *
+ * @param[in] point the point at which to evaluate the gradient
+ * @param[in] obstacles map of <learned params -> list of obstacles>
+ * @param[in] goal the target/end point for the trajectory
+ *
+ * @return returns the x and y components of the summed gradient
+ *
+ */
+const Point GPF::calculateSummedRepulsiveGradient(const Point& point, const Map& obstacles, const Goal& goal){
+
+  size_t workers = std::thread::hardware_concurrency() / 2; //Safety net
+  size_t total = obstacles.size(); 
+  size_t batch_size = (total+workers-1) / workers;  //evenly disperse the threads
   auto it = obstacles.begin();
-  for(size_t batch=0; batch<workers && it != obstacles.end(); ++batch){
+  Point response = Eigen::Vector2d::Zero();
 
+  for(size_t batch=0; batch<workers && it != obstacles.end(); ++batch){
 
     std::vector<std::future<Point>> futures;
 
+    // Make the threads
     for (size_t count = 0; count < batch_size && it != obstacles.end(); ++count, ++it) {
 
       const auto& params = it->first;
       const auto& obs_list = it->second;
 
-      futures.push_back(std::async(std::launch::async, &PotentialFields::GPF::calculateRepulsiveGradient,this, std::ref(point), std::cref(params), std::cref(obs_list)));
+      futures.push_back(std::async(std::launch::async, &PotentialFields::GPF::calculateRepulsiveGradient, this, std::ref(point), std::cref(params), std::cref(obs_list), std::cref(goal)));
 
     }
 
+    //Sum over all threads 
     for (auto& f : futures){
 
-
-      results.push_back((f.get()));
+      response += (f.get());
 
     }
-  }
-
-  Point response = Eigen::Vector2d::Zero();
-  for (auto& res : results){
-
-    response+= res;
   }
 
 
@@ -109,19 +142,19 @@ const Eigen::Vector2d GPF::calculateSummedRepulsiveGradient(Eigen::Vector2d& poi
 
 
 //Calculate distance from one point to the edge of an obstacle
-const double GPF::calculateSignedDistance(const Eigen::Vector2d& p,const Obstacle& obstacle) const noexcept{
+const double GPF::calculateSignedDistance(const Point& p,const Obstacle& obstacle) const noexcept{
   return (p-obstacle.center).norm() - obstacle.radius;
 }
 
-const Eigen::Vector2d GPF::calculateNormalVector(const Eigen::Vector2d& p, const Obstacle& obstacle) const noexcept{
+const Eigen::Vector2d GPF::calculateNormalVector(const Point& p, const Obstacle& obstacle) const noexcept{
 
-  Eigen::Vector2d distance = (p-obstacle.center);
+  Point distance = (p-obstacle.center);
   double norm = distance.norm();
   return distance.squaredNorm() > 1e-18 ? distance.normalized() : Eigen::Vector2d::Zero();
 }
 
 
-Point GPF::calculateRepulsiveGradient(Eigen::Vector2d& point, const Preferences& params, const std::vector<Obstacle>& obstacle){
+Point GPF::calculateRepulsiveGradient(const Point& point, const Preferences& params, const std::vector<Obstacle>& obstacle, const Goal& goal){
 
   double signed_dist;
   Point normal_vec;
@@ -129,7 +162,8 @@ Point GPF::calculateRepulsiveGradient(Eigen::Vector2d& point, const Preferences&
   Point grad_repulsive;
   Point goal_dir;
   double rot_sign;
-  Eigen::Vector2d result = Eigen::Vector2d::Zero();
+
+  Point result = Eigen::Vector2d::Zero();
   double k_rot=0.8;
 
   Point grad_rot;
@@ -145,7 +179,7 @@ Point GPF::calculateRepulsiveGradient(Eigen::Vector2d& point, const Preferences&
 
     Eigen::Vector2d tangent_vec (-normal_vec.y(), normal_vec.x());
 
-    goal_dir = (tangent_vec - point).normalized(); //this line needs to be fixed
+    goal_dir = (goal.position - point).normalized(); //this line needs to be fixed
 
     rot_sign = (normal_vec.x() * goal_dir.y() - normal_vec.y() * goal_dir.x() > 0 ? 1.0 : -1.0);
 
@@ -161,8 +195,6 @@ Point GPF::calculateRepulsiveGradient(Eigen::Vector2d& point, const Preferences&
 
 
 
-
-
 int main() {
     // Instantiate the potential field
     GPF potential_field;
@@ -173,28 +205,23 @@ int main() {
     // Create a goal at (5,5)
     World::Goal goal;
     Eigen::Vector2d goal_pos(5.0, 5.0);
-    goal.setPosition(goal_pos);
-    goal.setAttractiveGain(1.0); // how strongly to pull toward the goal
+    goal.position = goal_pos;
 
     // Create obstacle parameters
     UserPreferences::PotentialFieldParams params1;
-    params1.amplitude = 10.0;
-    params1.sigma = 1.0;
     params1.id = "set1";
 
     // Create obstacles
     Environment::Obstacle obstacle1;
     obstacle1.id = "obs1";
     obstacle1.center = Eigen::Vector2d(2.0, 0.0);
-    obstacle1.radius = 0.5;
 
     Environment::Obstacle obstacle2;
     obstacle2.id = "obs2";
     obstacle2.center = Eigen::Vector2d(0.0, 2.0);
-    obstacle2.radius = 0.5;
 
     // Map of params -> list of obstacles
-    GPF::Map obstacles;
+    Map obstacles;
     obstacles[params1] = { obstacle1, obstacle2 };
 
     // Generate trajectory

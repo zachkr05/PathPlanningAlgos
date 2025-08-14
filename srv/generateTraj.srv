@@ -1,0 +1,13 @@
+
+
+# Request
+PathPlanningAlgos/Goal goal
+PathPlanningAlgos/Robot robot
+PathPlanningAlgos/GaussianParams[] params
+PathPlanningAlgos/ObstacleList[] values
+
+---
+
+# Response
+PathPlanningAlgos/Point[] trajectory1
+

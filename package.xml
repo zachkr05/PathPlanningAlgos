@@ -12,10 +12,13 @@
 
   <!-- Build system -->
   <buildtool_depend>catkin</buildtool_depend>
-
+  <build_depend>message_generation</build_depend>
+  <exec_depend>message_runtime</exec_depend>
   <!-- Build-time and run-time dependencies -->
   <depend>roscpp</depend>
-  <depend>geometry_msgs</depend>
+
+  <build_depend>geometry_msgs</build_depend>
+  <exec_depend>geometry_msgs</exec_depend>
   <depend>std_msgs</depend>
   <!-- (Eigen3 is found via CMake; it’s not a catkin package, so no entry here) -->
   <build_depend>eigen</build_depend>

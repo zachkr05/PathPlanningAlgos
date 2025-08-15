@@ -18,15 +18,18 @@
 #include <string>
 #include <vector>
 #include <map>
-#include "PathPlanningAlgos/generateTraj.h"
+#include "ImmersionBot/generateTraj.h"
 
-PathPlanning::serviceHandler::serviceHandler(ros::NodeHandle& nh) : _nh("~"){
+ImmersionBot::serviceHandler::serviceHandler(ros::NodeHandle& nh) : _nh("~"){
 
-  _generate_traj_srv = _nh.advertiseService("/generateTrajectory", &PathPlanning::serviceHandler::generateTrajectory, this);
+  _generate_traj_srv = nh.advertiseService("/generateTrajectory", &ImmersionBot::serviceHandler::generateTrajectory, this);
+  _modify_traj_srv = nh.advertiseService("/modifyTrajectory", &ImmersionBot::serviceHandler::modifyTrajectory, this);
+
+  _trajectory_pub = nh.advertise<trajectory_msgs::JointTrajectoryConstPtr>("/TransferTrajectory", 10);
 
 }
 
-bool PathPlanning::serviceHandler::generateTrajectory(PathPlanningAlgos::generateTraj::Request &req,
+bool ImmersionBot::serviceHandler::generateTrajectory(PathPlanningAlgos::generateTraj::Request &req,
                         PathPlanningAlgos::generateTraj::Response &res){
 
   Eigen::Vector2d pos_g (req.goal.transform.translation.x, req.goal.transform.translation.y);
@@ -72,28 +75,63 @@ bool PathPlanning::serviceHandler::generateTrajectory(PathPlanningAlgos::generat
       learnedPreferences[key[i]] = values[i];
   }
 
+   _trajectory = _ptl_fld.generateTrajectory(pos_r,learnedPreferences, goal);
+  
+   //TODO: use clampedBSpline
 
+   _trajectory = utils::calculateClampedBSpline(_trajectory);
 
-
-   std::vector<Eigen::Vector2d> trajectory = _ptl_fld.generateTrajectory(pos_r,learnedPreferences, goal);
-
-
-   res.trajectory1.resize(trajectory.size());
-  for (auto& pt : trajectory){
+   res.trajectory.resize(trajectory.size());
+    for (auto& pt : _trajectory){
     size_t idx = &pt - &trajectory[0];
-    res.trajectory1[idx].x = pt[0];
-    res.trajectory1[idx].y = pt[1];
-    res.trajectory1[idx].z = 0;
-  }
+    res.trajectory[idx].x = pt[0];
+    res.trajectory[idx].y = pt[1];
+    res.trajectory[idx].z = 0;
+    }
 
-  return true;
+    //find arclength
+    
+    //publish path for MPCC
+    _trajectory_pub.publish(res.trajectory);
+
+    //publilsh the arclength
+
+    return true;
 }
+
+
+bool ImmersionBot::modifyTrajectory(ImmersionBot::modifyTraj::Request &req, ImmersionBot::modifyTraj::res &res){
+
+
+  //get the index of the point that was altered
+  Eigen::Vector2d modified_pt(req.modified_pt.x,req.modified_pt.y);
+  int index = req.index;
+  if(!running){
+
+    //recalculate the arclengthv
+    _trajectory[index][0] = modified_pt[0];
+    _trajectory[index][1] = modified_pt[1];
+
+    //recompute arclength
+    vector<double> arclength = compute_arclength() 
+
+  }
+  //If not running:
+    // Assume point is at index i 
+    // recompute the arclength from point i-1 to i and i to i+1
+    // smooth from i -> end
+    //
+
+
+}
+
+
 
 int main(int argc, char** argv){
 
   ros::init(argc,argv,"PathPlanner");
   ros::NodeHandle nh;
-  PathPlanning::serviceHandler serviceHandler(nh);
+  ImmersionBot::serviceHandler serviceHandler(nh);
 
   ros::spin();
 

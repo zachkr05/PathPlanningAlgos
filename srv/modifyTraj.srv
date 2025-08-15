@@ -1,0 +1,11 @@
+
+#Request
+
+geometry_msgs/Point modified_pt
+int index
+bool running
+---
+
+
+#Response
+std_srvs/Empty null

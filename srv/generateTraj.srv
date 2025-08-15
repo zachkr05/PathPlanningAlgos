@@ -9,5 +9,5 @@ PathPlanningAlgos/ObstacleList[] values
 ---
 
 # Response
-PathPlanningAlgos/Point[] trajectory1
-
+trajectory_msgs/JointTrajectory trajectory
+float64[] arc_length

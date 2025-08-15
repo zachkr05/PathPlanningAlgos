@@ -1,11 +1,11 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>PathPlanningAlgos</name>
+  <name>ImmersionBot</name>
   <version>0.0.1</version>
-  <description>Robot and obstacle tracking for Vicon-based path-planning demos.</description>
+  <description>Displays a trajectory in an AR headset</description>
 
   <!-- One (or more) maintainers -->
-  <maintainer email="your_email@example.com">Your Name</maintainer>
+  <maintainer email="ezj2hu@virginia.edu">Zachariah K. Risheq</maintainer>
 
   <!-- Choose any OSI-approved license -->
   <license>MIT</license>
